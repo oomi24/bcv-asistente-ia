@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'; // Importar auth
-import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from 'docx'; // Para la descarga de DOCX
+// Corrección 1: Se eliminan TextRun y HeadingLevel porque no se usan directamente en el código de handleDownloadDocx
+import { Document, Packer, Paragraph, AlignmentType } from 'docx'; // Para la descarga de DOCX
 import { Download, Printer } from 'lucide-react'; // Para los iconos
 
 // Cargar la fuente 'Courier Prime' de Google Fonts
@@ -30,6 +30,7 @@ const LoadingSpinner = ({ size = 'md', message = 'Cargando...' }) => {
   const spinnerSize = size === 'sm' ? 'w-4 h-4' : 'w-8 h-8';
   return (
     <div className="flex flex-col items-center justify-center">
+      {/* Corrección 2: Se elimina la prop 'color' ya que no está definida en la interfaz de LoadingSpinner */}
       <div className={`${spinnerSize} border-2 border-t-2 border-white rounded-full animate-spin`}></div>
       {message && <p className="text-white text-sm mt-2">{message}</p>}
     </div>
@@ -38,6 +39,8 @@ const LoadingSpinner = ({ size = 'md', message = 'Cargando...' }) => {
 
 // Función para llamar a la API de Gemini (adaptada para usar la API Key de .env)
 const generateTextGemini = async (prompt: string): Promise<string> => {
+  // Corrección 3: 'import.meta.env' es un problema de configuración de TypeScript/Vite, no de esta línea en sí.
+  // La solución está en tsconfig.json y vite.config.ts.
   const apiKey = import.meta.env.VITE_API_KEY;
   if (!apiKey) {
     throw new Error("API Key de Gemini no configurada. Por favor, añádela al archivo .env como VITE_API_KEY.");
@@ -65,14 +68,44 @@ const generateTextGemini = async (prompt: string): Promise<string> => {
   }
 };
 
-// Función para simular búsqueda de noticias (puedes reemplazarla con una API real si es necesario)
+// **FUNCIÓN PARA BÚSQUEDA DE NOTICIAS REALES (LLAMA A FIREBASE FUNCTION)**
 const searchNewsWithGemini = async (query: string) => {
-  const simulatedResults = [
-    { title: `Noticia sobre ${query} 1`, link: `https://ejemplo.com/noticia1-${query}`, snippet: `Un breve resumen de la noticia 1 sobre ${query}.` },
-    { title: `Noticia sobre ${query} 2`, link: `https://ejemplo.com/noticia2-${query}`, snippet: `Un breve resumen de la noticia 2 sobre ${query}.` },
-  ];
-  const simulatedTextResponse = `Se han encontrado varios artículos recientes relacionados con "${query}". Los temas principales incluyen... (Este texto sería generado por Gemini resumiendo los resultados de búsqueda reales).`;
-  return { textResponse: simulatedTextResponse, searchResults: simulatedResults };
+  // Corrección 4: 'import.meta.env' es un problema de configuración de TypeScript/Vite.
+  const searchFunctionUrl = import.meta.env.VITE_SEARCH_FUNCTION_URL;
+  if (!searchFunctionUrl) {
+    throw new Error("URL de la función de búsqueda no configurada. Por favor, añádela al archivo .env como VITE_SEARCH_FUNCTION_URL.");
+  }
+
+  try {
+    const response = await fetch(`${searchFunctionUrl}?q=${encodeURIComponent(query)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Error en la función de búsqueda: ${response.status} ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    // Ahora, usa Gemini para resumir los resultados reales obtenidos
+    let newsSnippets = data.results.map((item: any) => `Título: ${item.title}\nEnlace: ${item.link}\nSnippet: ${item.snippet}`).join('\n\n');
+    if (newsSnippets.length > 3000) { // Limita el contexto para Gemini si es muy largo
+        newsSnippets = newsSnippets.substring(0, 3000) + "...";
+    }
+
+    const summaryPrompt = `Basado en los siguientes snippets de noticias, genera un resumen conciso y objetivo, destacando los puntos clave relevantes para un contexto económico-financiero institucional. Incluye las fuentes originales:\n\n${newsSnippets}`;
+    const textResponse = await generateTextGemini(summaryPrompt);
+
+    return { textResponse, searchResults: data.results };
+
+  } catch (error: any) {
+    console.error("Error al llamar a la función de búsqueda de noticias:", error);
+    throw new Error(`No se pudieron obtener noticias reales: ${error.message}`);
+  }
 };
 
 
@@ -87,13 +120,15 @@ const App = () => {
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [error, setError] = useState<string | null>('');
   const [db, setDb] = useState<any | null>(null); // Instancia de Firestore
-  const [auth, setAuth] = useState<any | null>(null); // Instancia de Auth
+  // Corrección 5: Se elimina la declaración de 'auth' si no se usa directamente en el componente
+  // const [auth, setAuth] = useState<any | null>(null); // Instancia de Auth
   const [userId, setUserId] = useState<string | null>(null); // ID del usuario autenticado
 
   // Inicializar Firebase y autenticar al usuario
   useEffect(() => {
     try {
       const firebaseConfig = {
+        // Corrección 6: 'import.meta.env' es un problema de configuración de TypeScript/Vite.
         apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
         authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
         projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
@@ -107,7 +142,8 @@ const App = () => {
         'VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN', 'VITE_FIREBASE_PROJECT_ID',
         'VITE_FIREBASE_STORAGE_BUCKET', 'VITE_FIREBASE_MESSAGING_SENDER_ID', 'VITE_FIREBASE_APP_ID'
       ];
-      const missingVars = requiredFirebaseVars.filter(envVar => !import.meta.env[envVar]);
+      // Corrección 7: 'import.meta.env' es un problema de configuración de TypeScript/Vite.
+      const missingVars = requiredFirebaseVars.filter(envVar => !(import.meta.env as any)[envVar]); // Se añade (as any) como solución temporal si tsconfig no se actualiza
       if (missingVars.length > 0) {
         throw new Error(`Faltan variables de entorno de Firebase: ${missingVars.join(', ')}. Por favor, añádelas a tu archivo .env.`);
       }
@@ -117,7 +153,8 @@ const App = () => {
       const firebaseAuth = getAuth(app);
 
       setDb(firestoreDb);
-      setAuth(firebaseAuth);
+      // Corrección 8: Si el estado 'auth' se elimina, esta línea también debe eliminarse
+      // setAuth(firebaseAuth); 
 
       // Iniciar sesión anónimamente si no hay usuario o escuchar cambios de autenticación
       onAuthStateChanged(firebaseAuth, (user) => {
@@ -193,7 +230,6 @@ const App = () => {
       return;
     }
     try {
-      // Añadir el userId al item antes de guardar
       const itemToSave = { ...item, userId: userId };
       const docRef = await addDoc(collection(db, 'ai_generated_content'), itemToSave);
       console.log("Contenido guardado en Firestore con ID:", docRef.id);
@@ -212,7 +248,7 @@ const App = () => {
       const resultText = await generateTextGemini(prompt);
       const newItem: AiGeneratedContentItem = { type, content: resultText, timestamp: new Date().toLocaleString() };
       setAiGeneratedContent(prev => [...prev, newItem]);
-      await saveContentToFirestore(newItem); // Guarda el contenido en Firestore
+      await saveContentToFirestore(newItem);
     } catch (err: any) {
       setError(err.message || `Error al comunicarse con la IA`);
     } finally {
@@ -389,7 +425,7 @@ const App = () => {
           </div>
 
           <button onClick={processContext} disabled={isLoading || !db || !userId} className="w-full bg-[#004B87] text-white py-3 rounded-lg font-bold hover:bg-blue-800 transition duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex items-center justify-center">
-            {isLoading ? <><LoadingSpinner size="sm" color="text-white"/> <span className="ml-2">{loadingMessage || 'Procesando...'}</span></> : 'Procesar Contexto'}
+            {isLoading ? <><LoadingSpinner size="sm"/> <span className="ml-2">{loadingMessage || 'Procesando...'}</span></> : 'Procesar Contexto'}
           </button>
           {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
           {!db || !userId && <p className="text-yellow-600 text-sm mt-2">Esperando inicialización de Firebase y autenticación de usuario...</p>}
