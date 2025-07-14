@@ -1,0 +1,29 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        // "npm --prefix \"$RESOURCE_DIR\" run lint" // Deja esta línea comentada o elimínala
+      ]
+    }
+  ]
+  // Si tienes una sección "hosting" o alguna otra sección, asegúrate de que esté bien formada.
+  // Por ejemplo, si tenías "hosting", debería verse así:
+  // , // <-- ¡Importante: esta coma si hay otra sección después de "functions"!
+  // "hosting": {
+  //   "public": "public",
+  //   "ignore": [
+  //     "firebase.json",
+  //     "**/.*",
+  //     "**/node_modules/**"
+  //   ]
+  // }
+}

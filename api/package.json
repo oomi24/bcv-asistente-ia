@@ -1,0 +1,17 @@
+{
+  "name": "vercel-news-api",
+  "version": "1.0.0",
+  "description": "Vercel Serverless Function for news search",
+  "main": "news.js",
+  "dependencies": {
+    "node-fetch": "^2.6.1",
+    "rss-parser": "^3.12.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

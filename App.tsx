@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'; // Importar auth
-// Corrección 1: Se eliminan TextRun y HeadingLevel porque no se usan directamente en el código de handleDownloadDocx
 import { Document, Packer, Paragraph, AlignmentType } from 'docx'; // Para la descarga de DOCX
 import { Download, Printer } from 'lucide-react'; // Para los iconos
 
@@ -30,7 +29,6 @@ const LoadingSpinner = ({ size = 'md', message = 'Cargando...' }) => {
   const spinnerSize = size === 'sm' ? 'w-4 h-4' : 'w-8 h-8';
   return (
     <div className="flex flex-col items-center justify-center">
-      {/* Corrección 2: Se elimina la prop 'color' ya que no está definida en la interfaz de LoadingSpinner */}
       <div className={`${spinnerSize} border-2 border-t-2 border-white rounded-full animate-spin`}></div>
       {message && <p className="text-white text-sm mt-2">{message}</p>}
     </div>
@@ -39,8 +37,6 @@ const LoadingSpinner = ({ size = 'md', message = 'Cargando...' }) => {
 
 // Función para llamar a la API de Gemini (adaptada para usar la API Key de .env)
 const generateTextGemini = async (prompt: string): Promise<string> => {
-  // Corrección 3: 'import.meta.env' es un problema de configuración de TypeScript/Vite, no de esta línea en sí.
-  // La solución está en tsconfig.json y vite.config.ts.
   const apiKey = import.meta.env.VITE_API_KEY;
   if (!apiKey) {
     throw new Error("API Key de Gemini no configurada. Por favor, añádela al archivo .env como VITE_API_KEY.");
@@ -64,46 +60,48 @@ const generateTextGemini = async (prompt: string): Promise<string> => {
       result.candidates[0].content.parts.length > 0) {
     return result.candidates[0].content.parts[0].text;
   } else {
+    // DIAGNÓSTICO: Registra la respuesta completa de la API cuando la estructura es inesperada
+    console.error("Respuesta inesperada de la API de Gemini:", result);
     throw new Error('No se pudo generar contenido. La estructura de la respuesta de la IA es inesperada.');
   }
 };
 
-// **FUNCIÓN PARA BÚSQUEDA DE NOTICIAS REALES (LLAMA A FIREBASE FUNCTION)**
+// **FUNCIÓN DE BÚSQUEDA DE NOTICIAS REALES (LLAMA A LA FUNCIÓN DE VERCEL)**
 const searchNewsWithGemini = async (query: string) => {
-  // Corrección 4: 'import.meta.env' es un problema de configuración de TypeScript/Vite.
-  const searchFunctionUrl = import.meta.env.VITE_SEARCH_FUNCTION_URL;
-  if (!searchFunctionUrl) {
-    throw new Error("URL de la función de búsqueda no configurada. Por favor, añádela al archivo .env como VITE_SEARCH_FUNCTION_URL.");
-  }
+  // Ya no necesitamos VITE_SEARCH_FUNCTION_URL en el .env del frontend
+  // porque la llamada es a una ruta local que Vercel redirige.
+  const vercelApiUrl = `/api/news?query=${encodeURIComponent(query)}&method=google`; // Puedes cambiar method a 'rss' si quieres probar RSS
 
   try {
-    const response = await fetch(`${searchFunctionUrl}?q=${encodeURIComponent(query)}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await fetch(vercelApiUrl);
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Error en la función de búsqueda: ${response.status} ${errorText}`);
+      const errorData = await response.json();
+      throw new Error(`Error en la función de Vercel: ${response.status} - ${errorData.error || response.statusText}`);
     }
 
     const data = await response.json();
+    
+    const searchResults = data.results.map((article: any) => ({
+      title: article.title,
+      link: article.link,
+      snippet: article.snippet,
+      source: article.source // La función ya devuelve la fuente
+    }));
 
-    // Ahora, usa Gemini para resumir los resultados reales obtenidos
-    let newsSnippets = data.results.map((item: any) => `Título: ${item.title}\nEnlace: ${item.link}\nSnippet: ${item.snippet}`).join('\n\n');
+    // Usa Gemini para resumir los resultados reales obtenidos
+    let newsSnippets = searchResults.map((item: any) => `Título: ${item.title}\nEnlace: ${item.link}\nSnippet: ${item.snippet}`).join('\n\n');
     if (newsSnippets.length > 3000) { // Limita el contexto para Gemini si es muy largo
         newsSnippets = newsSnippets.substring(0, 3000) + "...";
     }
 
-    const summaryPrompt = `Basado en los siguientes snippets de noticias, genera un resumen conciso y objetivo, destacando los puntos clave relevantes para un contexto económico-financiero institucional. Incluye las fuentes originales:\n\n${newsSnippets}`;
+    const summaryPrompt = `${systemPrompt}\n\nBasado en los siguientes snippets de noticias, genera un resumen conciso y objetivo, destacando los puntos clave relevantes para un contexto económico-financiero institucional. Incluye las fuentes originales:\n\n${newsSnippets}`;
     const textResponse = await generateTextGemini(summaryPrompt);
 
-    return { textResponse, searchResults: data.results };
+    return { textResponse, searchResults: searchResults };
 
   } catch (error: any) {
-    console.error("Error al llamar a la función de búsqueda de noticias:", error);
+    console.error("Error al llamar a la función de Vercel:", error);
     throw new Error(`No se pudieron obtener noticias reales: ${error.message}`);
   }
 };
@@ -120,15 +118,13 @@ const App = () => {
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [error, setError] = useState<string | null>('');
   const [db, setDb] = useState<any | null>(null); // Instancia de Firestore
-  // Corrección 5: Se elimina la declaración de 'auth' si no se usa directamente en el componente
-  // const [auth, setAuth] = useState<any | null>(null); // Instancia de Auth
+  const [auth, setAuth] = useState<any | null>(null); // Instancia de Auth
   const [userId, setUserId] = useState<string | null>(null); // ID del usuario autenticado
 
   // Inicializar Firebase y autenticar al usuario
   useEffect(() => {
     try {
       const firebaseConfig = {
-        // Corrección 6: 'import.meta.env' es un problema de configuración de TypeScript/Vite.
         apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
         authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
         projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
@@ -142,8 +138,7 @@ const App = () => {
         'VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN', 'VITE_FIREBASE_PROJECT_ID',
         'VITE_FIREBASE_STORAGE_BUCKET', 'VITE_FIREBASE_MESSAGING_SENDER_ID', 'VITE_FIREBASE_APP_ID'
       ];
-      // Corrección 7: 'import.meta.env' es un problema de configuración de TypeScript/Vite.
-      const missingVars = requiredFirebaseVars.filter(envVar => !(import.meta.env as any)[envVar]); // Se añade (as any) como solución temporal si tsconfig no se actualiza
+      const missingVars = requiredFirebaseVars.filter(envVar => !(import.meta.env as any)[envVar]);
       if (missingVars.length > 0) {
         throw new Error(`Faltan variables de entorno de Firebase: ${missingVars.join(', ')}. Por favor, añádelas a tu archivo .env.`);
       }
@@ -153,8 +148,7 @@ const App = () => {
       const firebaseAuth = getAuth(app);
 
       setDb(firestoreDb);
-      // Corrección 8: Si el estado 'auth' se elimina, esta línea también debe eliminarse
-      // setAuth(firebaseAuth); 
+      setAuth(firebaseAuth);
 
       // Iniciar sesión anónimamente si no hay usuario o escuchar cambios de autenticación
       onAuthStateChanged(firebaseAuth, (user) => {
@@ -230,6 +224,7 @@ const App = () => {
       return;
     }
     try {
+      // Añadir el userId al item antes de guardar
       const itemToSave = { ...item, userId: userId };
       const docRef = await addDoc(collection(db, 'ai_generated_content'), itemToSave);
       console.log("Contenido guardado en Firestore con ID:", docRef.id);
@@ -248,7 +243,7 @@ const App = () => {
       const resultText = await generateTextGemini(prompt);
       const newItem: AiGeneratedContentItem = { type, content: resultText, timestamp: new Date().toLocaleString() };
       setAiGeneratedContent(prev => [...prev, newItem]);
-      await saveContentToFirestore(newItem);
+      await saveContentToFirestore(newItem); // Guarda el contenido en Firestore
     } catch (err: any) {
       setError(err.message || `Error al comunicarse con la IA`);
     } finally {
@@ -276,14 +271,14 @@ const App = () => {
             const { textResponse, searchResults } = await searchNewsWithGemini(webSearchQuery);
             let newsContext = `Resumen de IA sobre la búsqueda "${webSearchQuery}":\n${textResponse}\n\n`;
             if (searchResults.length > 0) {
-                newsContext += "Fuentes encontradas:\n";
+                newsContext += "Fuentes encontradas (simuladas):\n";
                 searchResults.forEach(item => {
                     newsContext += `Título: ${item.title}\nEnlace: ${item.link}\n\n`;
                 });
             }
             fullContext += newsContext;
         } catch (err: any) {
-            setError(err.message || 'Error al realizar la búsqueda web.');
+            setError(err.message || 'Error al realizar la búsqueda web simulada.');
             setIsLoading(false);
             return;
         } finally {
