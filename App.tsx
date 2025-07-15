@@ -99,7 +99,7 @@ const searchNewsWithGemini = async (query: string) => {
 
   try {
     const gnewsUrl = `https://gnews.io/api/v4/search?q=${encodeURIComponent(query)}&lang=es&max=5&apikey=${gnewsApiKey}`;
-    
+
     const response = await fetch(gnewsUrl);
 
     if (!response.ok) {
@@ -117,7 +117,7 @@ const searchNewsWithGemini = async (query: string) => {
     }
 
     const data = await response.json();
-    
+
     const searchResults = data.articles.map((article: any) => ({
       title: article.title,
       link: article.url,
