@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from 'docx';
+import { Document, Packer, Paragraph, AlignmentType } from 'docx';
 import { Download, Printer } from 'lucide-react';
 
 // Cargar la fuente 'Courier Prime' de Google Fonts
@@ -35,6 +35,32 @@ const LoadingSpinner = ({ size = 'md', message = 'Cargando...' }) => {
   );
 };
 
+// Prompt base para la IA, incorporando el tono y la identidad del BCV
+const systemPrompt = `
+  Eres la inteligencia artificial central del "BCV Asistente de Contenido IA", una herramienta oficial del Banco Central de Venezuela (BCV). Tu función principal es analizar información y generar contenido para comunicaciones institucionales, económicas y financieras.
+
+  **Identidad Institucional (Comunicación y Estilo):**
+  1.  **Tono:** Siempre adopta un tono formal, objetivo, neutro y constructivo. Evita cualquier lenguaje coloquial, sensacionalista, amarillista, adulante o subjetivo.
+  2.  **Enfoque Institucional:** Tus respuestas deben reflejar y defender las acciones, políticas y marcos legales de las instituciones del Estado venezolano, en particular el Banco Central de Venezuela (BCV). Presenta sus roles y decisiones de manera clara y basada en hechos.
+  3.  **Precisión y Verificabilidad:** Toda la información generada debe ser precisa, basada en los datos y el contexto proporcionado. Prioriza los hechos verificables sobre las opiniones o especulaciones.
+  4.  **Terminología:** Utiliza la terminología económica y financiera oficial y estandarizada.
+  5.  **Audiencia:** Dirígete a una audiencia profesional y técnica, así como al público general interesado en la economía y finanzas, manteniendo siempre la claridad y la seriedad.
+
+  **Estilo Visual Implícito (para Formato y Estructura de Salida):**
+  Aunque no puedes generar imágenes directamente, tus respuestas deben evocar la profesionalidad y seriedad visual de la marca BCV. Considera los siguientes elementos al estructurar tus respuestas:
+  1.  **Limpieza y Claridad:** Estructura el texto con párrafos definidos, viñetas si son apropiadas para listas de puntos clave, y títulos claros. Evita la sobrecarga de información en un solo bloque de texto.
+  2.  **Jerarquía Visual del Texto:** Utiliza negritas (Markdown: **texto**) para destacar títulos, subtítulos o puntos clave, simulando la organización visual de un documento oficial.
+  3.  **Consistencia:** Mantén una estructura y formato consistentes en todos los tipos de contenido generados.
+
+  **Restricciones Clave:**
+  * No Opinar: No emitas juicios de valor, opiniones personales ni predicciones no fundamentadas.
+  * No Especular: Limítate a los datos y el contexto proporcionado.
+  * No Usar Lenguaje Emocional: Evita cualquier adjetivo o frase que pueda interpretarse como emoción (positiva o negativa).
+  * No Crear Contenido Ficticio: Si la información no está en el contexto, indica que no puedes generarla o pídela.
+
+  **Directriz Final:** Actúa como un asistente experto y confiable, cuya producción es indistinguible de la comunicación oficial de una entidad tan prestigiosa como el Banco Central de Venezuela.
+`;
+
 // Función para llamar a la API de Gemini
 const generateTextGemini = async (prompt: string): Promise<string> => {
   const apiKey = import.meta.env.VITE_API_KEY;
@@ -64,7 +90,7 @@ const generateTextGemini = async (prompt: string): Promise<string> => {
   }
 };
 
-// **NUEVA FUNCIÓN PARA BÚSQUEDA DE NOTICIAS REALES (LLAMA A GNEWS API DIRECTAMENTE)**
+// **FUNCIÓN PARA BÚSQUEDA DE NOTICIAS REALES (LLAMA A GNEWS API DIRECTAMENTE)**
 const searchNewsWithGemini = async (query: string) => {
   const gnewsApiKey = import.meta.env.VITE_GNEWS_API_KEY;
   if (!gnewsApiKey) {
@@ -72,15 +98,22 @@ const searchNewsWithGemini = async (query: string) => {
   }
 
   try {
-    // Construye la URL para la GNews API
-    // Usamos 'lang=es' para noticias en español y 'max=5' para obtener 5 resultados
     const gnewsUrl = `https://gnews.io/api/v4/search?q=${encodeURIComponent(query)}&lang=es&max=5&apikey=${gnewsApiKey}`;
     
     const response = await fetch(gnewsUrl);
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(`Error al obtener noticias de GNews: ${response.status} - ${errorData.errors ? errorData.errors.join(', ') : response.statusText}`);
+      // MODIFICACIÓN CLAVE AQUÍ: Manejo más robusto de la propiedad 'errors' o 'message'
+      let errorMessage = 'Error desconocido al obtener noticias de GNews.';
+      if (errorData.errors && Array.isArray(errorData.errors)) {
+        errorMessage = errorData.errors.join(', ');
+      } else if (errorData.message) {
+        errorMessage = errorData.message;
+      } else if (response.statusText) {
+        errorMessage = response.statusText;
+      }
+      throw new Error(`Error al obtener noticias de GNews: ${response.status} - ${errorMessage}`);
     }
 
     const data = await response.json();
@@ -92,20 +125,23 @@ const searchNewsWithGemini = async (query: string) => {
       source: article.source.name
     }));
 
-    // Ahora, usa Gemini para resumir los resultados reales obtenidos
     let newsSnippets = searchResults.map((item: any) => `Título: ${item.title}\nEnlace: ${item.link}\nSnippet: ${item.snippet}`).join('\n\n');
-    if (newsSnippets.length > 3000) { // Limita el contexto para Gemini si es muy largo
+    if (newsSnippets.length > 3000) {
         newsSnippets = newsSnippets.substring(0, 3000) + "...";
     }
 
-    const summaryPrompt = `Basado en los siguientes snippets de noticias, genera un resumen conciso y objetivo, destacando los puntos clave relevantes para un contexto económico-financiero institucional. Incluye las fuentes originales:\n\n${newsSnippets}`;
+    if (newsSnippets.trim() === "") {
+      newsSnippets = "No se encontraron noticias relevantes en los feeds RSS para la consulta. Por favor, genera un resumen general sobre el tema solicitado o indica que no hay información específica.";
+    }
+
+    const summaryPrompt = `${systemPrompt}\n\nBasado en los siguientes snippets de noticias, genera un resumen conciso y objetivo, destacando los puntos clave relevantes para un contexto económico-financiero institucional. Incluye las fuentes originales:\n\n${newsSnippets}`;
     const textResponse = await generateTextGemini(summaryPrompt);
 
     return { textResponse, searchResults: searchResults };
 
   } catch (error: any) {
     console.error("Error al llamar a la GNews API:", error);
-    throw new Error(`No se pudieron obtener noticias reales: ${error.message}`);
+    throw new Error(`No se pudieron obtener noticias reales: ${error.message || 'Error desconocido'}`);
   }
 };
 
@@ -419,7 +455,7 @@ const App = () => {
           </div>
 
           <button onClick={processContext} disabled={isLoading || !db || !userId} className="w-full bg-[#004B87] text-white py-3 rounded-lg font-bold hover:bg-blue-800 transition duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex items-center justify-center">
-            {isLoading ? <><LoadingSpinner size="sm" color="text-white"/> <span className="ml-2">{loadingMessage || 'Procesando...'}</span></> : 'Procesar Contexto'}
+            {isLoading ? <><LoadingSpinner size="sm"/> <span className="ml-2">{loadingMessage || 'Procesando...'}</span></> : 'Procesar Contexto'}
           </button>
           {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
           {!db || !userId && <p className="text-yellow-600 text-sm mt-2">Esperando inicialización de Firebase y autenticación de usuario...</p>}
@@ -466,5 +502,6 @@ const App = () => {
 };
 
 export default App;
+
 
   
