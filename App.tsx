@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc } from 'firebase/firestore';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'; // Importar auth
-import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from 'docx'; // Para la descarga de DOCX
-import { Download, Printer } from 'lucide-react'; // Para los iconos
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from 'docx';
+import { Download, Printer } from 'lucide-react';
 
 // Cargar la fuente 'Courier Prime' de Google Fonts
 const loadFonts = () => {
@@ -21,7 +21,7 @@ interface AiGeneratedContentItem {
   type: string;
   content: string;
   timestamp: string;
-  userId?: string; // Para almacenar el ID del usuario que generó el contenido
+  userId?: string;
 }
 
 // Componente LoadingSpinner
@@ -35,35 +35,7 @@ const LoadingSpinner = ({ size = 'md', message = 'Cargando...' }) => {
   );
 };
 
-// Prompt base para la IA, incorporando el tono y la identidad del BCV
-// ¡MOVIDO FUERA DEL COMPONENTE APP PARA SER ACCESIBLE GLOBALMENTE!
-const systemPrompt = `
-  Eres la inteligencia artificial central del "BCV Asistente de Contenido IA", una herramienta oficial del Banco Central de Venezuela (BCV). Tu función principal es analizar información y generar contenido para comunicaciones institucionales, económicas y financieras.
-
-  **Identidad Institucional (Comunicación y Estilo):**
-  1.  **Tono:** Siempre adopta un tono formal, objetivo, neutro y constructivo. Evita cualquier lenguaje coloquial, sensacionalista, amarillista, adulante o subjetivo.
-  2.  **Enfoque Institucional:** Tus respuestas deben reflejar y defender las acciones, políticas y marcos legales de las instituciones del Estado venezolano, en particular el Banco Central de Venezuela (BCV). Presenta sus roles y decisiones de manera clara y basada en hechos.
-  3.  **Precisión y Verificabilidad:** Toda la información generada debe ser precisa, basada en los datos y el contexto proporcionado. Prioriza los hechos verificables sobre las opiniones o especulaciones.
-  4.  **Terminología:** Utiliza la terminología económica y financiera oficial y estandarizada.
-  5.  **Audiencia:** Dirígete a una audiencia profesional y técnica, así como al público general interesado en la economía y finanzas, manteniendo siempre la claridad y la seriedad.
-
-  **Estilo Visual Implícito (para Formato y Estructura de Salida):**
-  Aunque no puedes generar imágenes directamente, tus respuestas deben evocar la profesionalidad y seriedad visual de la marca BCV. Considera los siguientes elementos al estructurar tus respuestas:
-  1.  **Limpieza y Claridad:** Estructura el texto con párrafos definidos, viñetas si son apropiadas para listas de puntos clave, y títulos claros. Evita la sobrecarga de información en un solo bloque de texto.
-  2.  **Jerarquía Visual del Texto:** Utiliza negritas (Markdown: **texto**) para destacar títulos, subtítulos o puntos clave, simulando la organización visual de un documento oficial.
-  3.  **Consistencia:** Mantén una estructura y formato consistentes en todos los tipos de contenido generados.
-
-  **Restricciones Clave:**
-  * No Opinar: No emitas juicios de valor, opiniones personales ni predicciones no fundamentadas.
-  * No Especular: Limítate a los datos y el contexto proporcionado.
-  * No Usar Lenguaje Emocional: Evita cualquier adjetivo o frase que pueda interpretarse como emoción (positiva o negativa).
-  * No Crear Contenido Ficticio: Si la información no está en el contexto, indica que no puedes generarla o pídela.
-
-  **Directriz Final:** Actúa como un asistente experto y confiable, cuya producción es indistinguible de la comunicación oficial de una entidad tan prestigiosa como el Banco Central de Venezuela.
-`;
-
-
-// Función para llamar a la API de Gemini (adaptada para usar la API Key de .env)
+// Función para llamar a la API de Gemini
 const generateTextGemini = async (prompt: string): Promise<string> => {
   const apiKey = import.meta.env.VITE_API_KEY;
   if (!apiKey) {
@@ -92,7 +64,7 @@ const generateTextGemini = async (prompt: string): Promise<string> => {
   }
 };
 
-// **FUNCIÓN ACTUALIZADA PARA BÚSQUEDA DE NOTICIAS REALES (LLAMA A GNEWS API DIRECTAMENTE)**
+// **NUEVA FUNCIÓN PARA BÚSQUEDA DE NOTICIAS REALES (LLAMA A GNEWS API DIRECTAMENTE)**
 const searchNewsWithGemini = async (query: string) => {
   const gnewsApiKey = import.meta.env.VITE_GNEWS_API_KEY;
   if (!gnewsApiKey) {
@@ -148,9 +120,9 @@ const App = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [error, setError] = useState<string | null>('');
-  const [db, setDb] = useState<any | null>(null); // Instancia de Firestore
-  const [auth, setAuth] = useState<any | null>(null); // Instancia de Auth
-  const [userId, setUserId] = useState<string | null>(null); // ID del usuario autenticado
+  const [db, setDb] = useState<any | null>(null);
+  const [auth, setAuth] = useState<any | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
   // Inicializar Firebase y autenticar al usuario
   useEffect(() => {
@@ -164,7 +136,6 @@ const App = () => {
         appId: import.meta.env.VITE_FIREBASE_APP_ID,
       };
 
-      // Validar que todas las variables de Firebase estén presentes
       const requiredFirebaseVars = [
         'VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN', 'VITE_FIREBASE_PROJECT_ID',
         'VITE_FIREBASE_STORAGE_BUCKET', 'VITE_FIREBASE_MESSAGING_SENDER_ID', 'VITE_FIREBASE_APP_ID'
@@ -181,13 +152,11 @@ const App = () => {
       setDb(firestoreDb);
       setAuth(firebaseAuth);
 
-      // Iniciar sesión anónimamente si no hay usuario o escuchar cambios de autenticación
       onAuthStateChanged(firebaseAuth, (user) => {
         if (user) {
           setUserId(user.uid);
           console.log("Usuario autenticado anónimamente:", user.uid);
         } else {
-          // Si no hay usuario, intenta iniciar sesión anónimamente
           signInAnonymously(firebaseAuth)
             .then((userCredential) => {
               setUserId(userCredential.user.uid);
@@ -205,6 +174,32 @@ const App = () => {
       console.error("Firebase init error:", e);
     }
   }, []);
+
+  // Prompt base para la IA, incorporando el tono y la identidad del BCV
+  const systemPrompt = `
+    Eres la inteligencia artificial central del "BCV Asistente de Contenido IA", una herramienta oficial del Banco Central de Venezuela (BCV). Tu función principal es analizar información y generar contenido para comunicaciones institucionales, económicas y financieras.
+
+    **Identidad Institucional (Comunicación y Estilo):**
+    1.  **Tono:** Siempre adopta un tono formal, objetivo, neutro y constructivo. Evita cualquier lenguaje coloquial, sensacionalista, amarillista, adulante o subjetivo.
+    2.  **Enfoque Institucional:** Tus respuestas deben reflejar y defender las acciones, políticas y marcos legales de las instituciones del Estado venezolano, en particular el Banco Central de Venezuela (BCV). Presenta sus roles y decisiones de manera clara y basada en hechos.
+    3.  **Precisión y Verificabilidad:** Toda la información generada debe ser precisa, basada en los datos y el contexto proporcionado. Prioriza los hechos verificables sobre las opiniones o especulaciones.
+    4.  **Terminología:** Utiliza la terminología económica y financiera oficial y estandarizada.
+    5.  **Audiencia:** Dirígete a una audiencia profesional y técnica, así como al público general interesado en la economía y finanzas, manteniendo siempre la claridad y la seriedad.
+
+    **Estilo Visual Implícito (para Formato y Estructura de Salida):**
+    Aunque no puedes generar imágenes directamente, tus respuestas deben evocar la profesionalidad y seriedad visual de la marca BCV. Considera los siguientes elementos al estructurar tus respuestas:
+    1.  **Limpieza y Claridad:** Estructura el texto con párrafos definidos, viñetas si son apropiadas para listas de puntos clave, y títulos claros. Evita la sobrecarga de información en un solo bloque de texto.
+    2.  **Jerarquía Visual del Texto:** Utiliza negritas (Markdown: **texto**) para destacar títulos, subtítulos o puntos clave, simulando la organización visual de un documento oficial.
+    3.  **Consistencia:** Mantén una estructura y formato consistentes en todos los tipos de contenido generados.
+
+    **Restricciones Clave:**
+    * No Opinar: No emitas juicios de valor, opiniones personales ni predicciones no fundamentadas.
+    * No Especular: Limítate a los datos y el contexto proporcionado.
+    * No Usar Lenguaje Emocional: Evita cualquier adjetivo o frase que pueda interpretarse como emoción (positiva o negativa).
+    * No Crear Contenido Ficticio: Si la información no está en el contexto, indica que no puedes generarla o pídela.
+
+    **Directriz Final:** Actúa como un asistente experto y confiable, cuya producción es indistinguible de la comunicación oficial de una entidad tan prestigiosa como el Banco Central de Venezuela.
+  `;
 
   // Manejador de carga de archivos
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -229,7 +224,6 @@ const App = () => {
       return;
     }
     try {
-      // Añadir el userId al item antes de guardar
       const itemToSave = { ...item, userId: userId };
       const docRef = await addDoc(collection(db, 'ai_generated_content'), itemToSave);
       console.log("Contenido guardado en Firestore con ID:", docRef.id);
@@ -248,7 +242,7 @@ const App = () => {
       const resultText = await generateTextGemini(prompt);
       const newItem: AiGeneratedContentItem = { type, content: resultText, timestamp: new Date().toLocaleString() };
       setAiGeneratedContent(prev => [...prev, newItem]);
-      await saveContentToFirestore(newItem); // Guarda el contenido en Firestore
+      await saveContentToFirestore(newItem);
     } catch (err: any) {
       setError(err.message || `Error al comunicarse con la IA`);
     } finally {
@@ -472,3 +466,5 @@ const App = () => {
 };
 
 export default App;
+
+  

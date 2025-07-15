@@ -18,14 +18,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    // "noUncheckedSideEffectImports": true, // Puedes mantenerlo o quitarlo si causa problemas con algunas librerías
-
-    "paths": {
-      "@/*": ["./*"]
-    },
     "types": ["vite/client"]
   },
-  "include": ["src", "vite.config.ts"]
-  // LÍNEA CORREGIDA: Se eliminó la referencia a "tsconfig.node.json"
-  // "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src", "vite.config.ts"],
+  // LÍNEA ELIMINADA: "references": [{ "path": "./tsconfig.node.json" }]
+  // Esta línea se ha eliminado porque el archivo tsconfig.node.json no existe.
+  // No es necesaria para el funcionamiento de esta aplicación.
 }

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">bcv-asistente-de-contenido-ia</string>
+    <string name="title_activity_main">bcv-asistente-de-contenido-ia</string>
+    <string name="package_name">com.bcv.asistenteia</string>
+    <string name="custom_url_scheme">com.bcv.asistenteia</string>
+</resources>
