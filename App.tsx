@@ -66,11 +66,44 @@ const generateTextGemini = async (prompt: string): Promise<string> => {
   }
 };
 
-// **FUNCIÓN DE BÚSQUEDA DE NOTICIAS REALES (LLAMA A LA FUNCIÓN DE VERCEL)**
+// ... (código anterior de App.tsx, incluyendo importaciones y el componente LoadingSpinner) ...
+
+// Función para llamar a la API de Gemini (adaptada para usar la API Key de .env)
+const generateTextGemini = async (prompt: string): Promise<string> => {
+  const apiKey = import.meta.env.VITE_API_KEY;
+  if (!apiKey) {
+    throw new Error("API Key de Gemini no configurada. Por favor, añádela al archivo .env como VITE_API_KEY.");
+  }
+
+  let chatHistory = [];
+  chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+  const payload = { contents: chatHistory };
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  const result = await response.json();
+
+  if (result.candidates && result.candidates.length > 0 &&
+      result.candidates[0].content && result.candidates[0].content.parts &&
+      result.candidates[0].content.parts.length > 0) {
+    return result.candidates[0].content.parts[0].text;
+  } else {
+    // DIAGNÓSTICO: Registra la respuesta completa de la API cuando la estructura es inesperada
+    console.error("Respuesta inesperada de la API de Gemini:", result);
+    throw new Error('No se pudo generar contenido. La estructura de la respuesta de la IA es inesperada.');
+  }
+};
+
+// **NUEVA FUNCIÓN PARA BÚSQUEDA DE NOTICIAS REALES (LLAMA A LA FUNCIÓN DE VERCEL - SOLO RSS)**
 const searchNewsWithGemini = async (query: string) => {
-  // Ya no necesitamos VITE_SEARCH_FUNCTION_URL en el .env del frontend
-  // porque la llamada es a una ruta local que Vercel redirige.
-  const vercelApiUrl = `/api/news?query=${encodeURIComponent(query)}&method=google`; // Puedes cambiar method a 'rss' si quieres probar RSS
+  // La URL de tu función de Vercel se mapea a /api/news gracias a vercel.json
+  // Ya no se necesita el parámetro 'method' ya que solo usaremos RSS
+  const vercelApiUrl = `/api/news?query=${encodeURIComponent(query)}`; 
 
   try {
     const response = await fetch(vercelApiUrl);
@@ -82,17 +115,22 @@ const searchNewsWithGemini = async (query: string) => {
 
     const data = await response.json();
     
-    const searchResults = data.results.map((article: any) => ({
+    const searchResults = (data.results || []).map((article: any) => ({
       title: article.title,
       link: article.link,
       snippet: article.snippet,
       source: article.source // La función ya devuelve la fuente
     }));
 
-    // Usa Gemini para resumir los resultados reales obtenidos
+    // Ahora, usa Gemini para resumir los resultados reales obtenidos
     let newsSnippets = searchResults.map((item: any) => `Título: ${item.title}\nEnlace: ${item.link}\nSnippet: ${item.snippet}`).join('\n\n');
     if (newsSnippets.length > 3000) { // Limita el contexto para Gemini si es muy largo
         newsSnippets = newsSnippets.substring(0, 3000) + "...";
+    }
+
+    // Si no hay resultados de búsqueda, informa a Gemini para que no genere un resumen vacío
+    if (newsSnippets.trim() === "") {
+        newsSnippets = "No se encontraron noticias relevantes en los feeds RSS para la consulta. Por favor, genera un resumen general sobre el tema solicitado o indica que no hay información específica.";
     }
 
     const summaryPrompt = `${systemPrompt}\n\nBasado en los siguientes snippets de noticias, genera un resumen conciso y objetivo, destacando los puntos clave relevantes para un contexto económico-financiero institucional. Incluye las fuentes originales:\n\n${newsSnippets}`;
@@ -101,10 +139,12 @@ const searchNewsWithGemini = async (query: string) => {
     return { textResponse, searchResults: searchResults };
 
   } catch (error: any) {
-    console.error("Error al llamar a la función de Vercel:", error);
+    console.error("Error al llamar a la función de Vercel (RSS):", error);
     throw new Error(`No se pudieron obtener noticias reales: ${error.message}`);
   }
 };
+
+// ... (resto del código de App.tsx, incluyendo el componente App y las funciones handleDownloadDocx, printContent) ...
 
 
 // Componente principal de la aplicación
